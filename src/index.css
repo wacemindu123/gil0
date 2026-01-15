@@ -1,0 +1,143 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 6%;
+    --foreground: 40 10% 95%;
+
+    --card: 220 18% 10%;
+    --card-foreground: 40 10% 95%;
+
+    --popover: 220 18% 10%;
+    --popover-foreground: 40 10% 95%;
+
+    --primary: 270 91% 65%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 15%;
+    --secondary-foreground: 40 10% 85%;
+
+    --muted: 220 15% 18%;
+    --muted-foreground: 220 10% 55%;
+
+    --accent: 175 60% 45%;
+    --accent-foreground: 220 20% 6%;
+
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 40 10% 95%;
+
+    --success: 145 65% 42%;
+    --success-foreground: 40 10% 95%;
+
+    --border: 220 15% 18%;
+    --input: 220 15% 15%;
+    --ring: 270 91% 65%;
+
+    --radius: 0.75rem;
+
+    --gradient-gold: linear-gradient(135deg, hsl(270, 91%, 65%) 0%, hsl(263, 70%, 50%) 100%);
+    --gradient-card: linear-gradient(180deg, hsl(220, 18%, 12%) 0%, hsl(220, 18%, 8%) 100%);
+    --gradient-premium: linear-gradient(135deg, hsl(270, 91%, 65%) 0%, hsl(263, 70%, 50%) 50%, hsl(270, 91%, 65%) 100%);
+    
+    --shadow-card: 0 4px 24px -4px hsla(0, 0%, 0%, 0.5);
+    --shadow-glow: 0 0 40px -10px hsla(270, 91%, 65%, 0.3);
+  }
+
+  .dark {
+    --background: 220 20% 6%;
+    --foreground: 40 10% 95%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Space Grotesk', sans-serif;
+  }
+}
+
+@layer components {
+  .card-premium {
+    @apply relative overflow-hidden rounded-xl border border-border/50;
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-premium::before {
+    content: '';
+    @apply absolute inset-0 opacity-0 transition-opacity duration-300;
+    background: linear-gradient(135deg, hsla(42, 90%, 55%, 0.05) 0%, transparent 50%);
+  }
+
+  .card-premium:hover::before {
+    @apply opacity-100;
+  }
+
+  .text-gradient-gold {
+    background: var(--gradient-gold);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  .btn-premium {
+    @apply relative overflow-hidden font-semibold transition-all duration-300;
+    background: var(--gradient-gold);
+  }
+
+  .btn-premium:hover {
+    @apply scale-[1.02];
+    box-shadow: var(--shadow-glow);
+  }
+
+  .value-positive {
+    @apply text-success;
+  }
+
+  .value-negative {
+    @apply text-destructive;
+  }
+
+  .glass-effect {
+    @apply backdrop-blur-xl;
+    background: hsla(220, 18%, 10%, 0.8);
+  }
+
+  .animate-pulse-slow {
+    animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  .animate-shimmer {
+    animation: shimmer 2s linear infinite;
+    background: linear-gradient(90deg, transparent, hsla(42, 90%, 55%, 0.1), transparent);
+    background-size: 200% 100%;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+}
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
