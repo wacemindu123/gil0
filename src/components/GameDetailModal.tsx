@@ -65,9 +65,8 @@ export const GameDetailModal = ({ asset, isOpen, onClose }: GameDetailModalProps
         setCurrentMarketPrice(result.estimatedValue);
         setPriceBreakdown(result.priceBreakdown || null);
         
-        // Generate simulated price history based on current price
-        // In production, this would come from historical API data
-        const history = generatePriceHistory(result.estimatedValue, 180);
+        // Generate 7-day price history based on current price
+        const history = generateWeeklyPriceHistory(result.estimatedValue);
         setPriceHistory(history);
       }
     } catch (error) {
@@ -77,37 +76,38 @@ export const GameDetailModal = ({ asset, isOpen, onClose }: GameDetailModalProps
     }
   };
 
-  // Generate realistic price history for visualization
-  const generatePriceHistory = (currentPrice: number, days: number): PriceHistoryPoint[] => {
+  // Generate 7-day price history for visualization
+  const generateWeeklyPriceHistory = (currentPrice: number): PriceHistoryPoint[] => {
     const history: PriceHistoryPoint[] = [];
-    const volatility = 0.02; // 2% daily volatility
-    let price = currentPrice * (0.85 + Math.random() * 0.15); // Start 85-100% of current
+    const volatility = 0.015; // 1.5% daily volatility (lower for weekly view)
+    
+    // Start from a price slightly different from current
+    let price = currentPrice * (0.95 + Math.random() * 0.05);
 
-    for (let i = days; i >= 0; i--) {
+    // Generate daily data points for the past 7 days
+    for (let i = 6; i >= 0; i--) {
       const date = new Date();
       date.setDate(date.getDate() - i);
       
-      // Random walk with slight upward trend
-      const change = (Math.random() - 0.48) * volatility;
-      price = price * (1 + change);
+      // Random walk toward current price
+      const targetDrift = (currentPrice - price) * 0.1; // Slight pull toward current
+      const randomChange = (Math.random() - 0.5) * volatility * price;
+      price = price + targetDrift + randomChange;
       
-      // Keep price reasonable
-      price = Math.max(price, currentPrice * 0.5);
-      price = Math.min(price, currentPrice * 1.5);
+      // Keep price within reasonable bounds
+      price = Math.max(price, currentPrice * 0.9);
+      price = Math.min(price, currentPrice * 1.1);
 
-      if (i % 7 === 0) { // Weekly data points
-        history.push({
-          date: date.toISOString().split('T')[0],
-          price: Math.round(price * 100) / 100,
-        });
-      }
+      history.push({
+        date: date.toISOString().split('T')[0],
+        price: Math.round(price * 100) / 100,
+      });
     }
 
-    // Ensure last point is current price
-    history.push({
-      date: new Date().toISOString().split('T')[0],
-      price: currentPrice,
-    });
+    // Ensure last point is exactly the current price
+    if (history.length > 0) {
+      history[history.length - 1].price = currentPrice;
+    }
 
     return history;
   };
@@ -228,7 +228,7 @@ export const GameDetailModal = ({ asset, isOpen, onClose }: GameDetailModalProps
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-primary" />
-                Price Trend (6 months)
+                Price Trend (7 days)
               </h3>
               <button 
                 onClick={fetchPriceData}
