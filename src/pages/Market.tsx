@@ -319,11 +319,26 @@ export const MarketPage = () => {
           </div>
         )}
 
-        {/* Scanned Code Display */}
-        {scannedCode && (
+        {/* Scanned Code Display with Search Option */}
+        {scannedCode && !result && (
           <div className="mb-4 p-3 rounded-lg bg-primary/20 border border-primary/30">
             <p className="text-xs text-muted-foreground">Scanned Barcode:</p>
-            <p className="font-mono text-foreground">{scannedCode}</p>
+            <p className="font-mono text-foreground mb-2">{scannedCode}</p>
+            {scannerError && (
+              <p className="text-xs text-muted-foreground mb-2">
+                UPC not in database. Try searching by game name below, or scan a different barcode.
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={() => {
+                setScannedCode(null);
+                setScannerError(null);
+              }}
+              className="text-xs text-primary hover:underline"
+            >
+              Clear & try again
+            </button>
           </div>
         )}
 

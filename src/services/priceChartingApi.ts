@@ -315,42 +315,68 @@ export async function lookupByUPC(upc: string): Promise<{
     return null;
   }
 
+  // Clean the UPC - remove any non-numeric characters
+  const cleanUPC = upc.replace(/\D/g, '');
+
   try {
-    // Clean the UPC - remove any non-numeric characters
-    const cleanUPC = upc.replace(/\D/g, '');
-    
-    const searchParams = new URLSearchParams({
+    // First, try direct UPC lookup
+    const upcParams = new URLSearchParams({
       t: apiConfig.priceCharting.apiKey,
       upc: cleanUPC,
     });
 
-    const response = await fetch(
-      `${apiConfig.priceCharting.baseUrl}/product?${searchParams}`
+    const upcResponse = await fetch(
+      `${apiConfig.priceCharting.baseUrl}/product?${upcParams}`
     );
 
-    if (!response.ok) {
-      console.error('PriceCharting UPC lookup error:', response.status);
-      return null;
+    if (upcResponse.ok) {
+      const upcData: PriceChartingResponse = await upcResponse.json();
+      
+      if (upcData.product) {
+        const product = upcData.product;
+        return {
+          name: product['product-name'],
+          platform: product['console-name'] || 'Unknown',
+          prices: {
+            loose: product['loose-price'] ? product['loose-price'] / 100 : undefined,
+            cib: product['cib-price'] ? product['cib-price'] / 100 : undefined,
+            sealed: product['new-price'] ? product['new-price'] / 100 : undefined,
+          },
+        };
+      }
     }
 
-    const data: PriceChartingResponse = await response.json();
+    // If direct UPC lookup fails, try searching by UPC as a query
+    console.log('Direct UPC lookup failed, trying search...');
+    const searchParams = new URLSearchParams({
+      t: apiConfig.priceCharting.apiKey,
+      q: cleanUPC,
+      type: 'video-games',
+    });
 
-    if (!data.product) {
-      console.log('No product found for UPC:', cleanUPC);
-      return null;
+    const searchResponse = await fetch(
+      `${apiConfig.priceCharting.baseUrl}/products?${searchParams}`
+    );
+
+    if (searchResponse.ok) {
+      const searchData: PriceChartingResponse = await searchResponse.json();
+      
+      if (searchData.products && searchData.products.length > 0) {
+        const product = searchData.products[0];
+        return {
+          name: product['product-name'],
+          platform: product['console-name'] || 'Unknown',
+          prices: {
+            loose: product['loose-price'] ? product['loose-price'] / 100 : undefined,
+            cib: product['cib-price'] ? product['cib-price'] / 100 : undefined,
+            sealed: product['new-price'] ? product['new-price'] / 100 : undefined,
+          },
+        };
+      }
     }
 
-    const product = data.product;
-    
-    return {
-      name: product['product-name'],
-      platform: product['console-name'] || 'Unknown',
-      prices: {
-        loose: product['loose-price'] ? product['loose-price'] / 100 : undefined,
-        cib: product['cib-price'] ? product['cib-price'] / 100 : undefined,
-        sealed: product['new-price'] ? product['new-price'] / 100 : undefined,
-      },
-    };
+    console.log('No product found for UPC:', cleanUPC);
+    return null;
   } catch (error) {
     console.error('PriceCharting UPC lookup error:', error);
     return null;
