@@ -54,10 +54,20 @@ export const MarketPage = () => {
   const [isScanning, setIsScanning] = useState(false);
   const [scannedCode, setScannedCode] = useState<string | null>(null);
   const scannerRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
   
   // Photo state
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
+
+  // Scroll to result when it appears
+  useEffect(() => {
+    if (result && resultRef.current) {
+      setTimeout(() => {
+        resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+    }
+  }, [result]);
 
   // Start barcode scanner
   const startScanner = useCallback(() => {
@@ -472,21 +482,25 @@ export const MarketPage = () => {
 
         {/* Result */}
         {result && (
-          <div className="card-premium p-4 mb-6 animate-slide-up">
+          <div ref={resultRef} className="card-premium p-4 mb-6 animate-slide-up border-2 border-success/50 shadow-lg shadow-success/20">
+            {/* Success Header */}
+            <div className="flex items-center gap-2 mb-4 pb-3 border-b border-border">
+              <div className="w-8 h-8 rounded-full bg-success/20 flex items-center justify-center">
+                <span className="text-success text-lg">✓</span>
+              </div>
+              <div>
+                <p className="text-xs text-success font-medium">Game Found!</p>
+                <p className="text-xs text-muted-foreground">Prices from PriceCharting</p>
+              </div>
+            </div>
+            
             <div className="flex items-start justify-between mb-4">
               <div>
-                <h3 className="font-semibold text-foreground">{result.name}</h3>
-                <p className="text-xs text-muted-foreground">
+                <h3 className="font-semibold text-foreground text-lg">{result.name}</h3>
+                <p className="text-sm text-muted-foreground">
                   {result.platform}
                 </p>
               </div>
-              <span className={`text-xs px-2 py-1 rounded ${
-                result.confidence === 'high' ? 'bg-success/20 text-success' :
-                result.confidence === 'medium' ? 'bg-primary/20 text-primary' :
-                'bg-muted text-muted-foreground'
-              }`}>
-                {result.confidence}
-              </span>
             </div>
 
             {/* All Prices from Barcode Scan */}
