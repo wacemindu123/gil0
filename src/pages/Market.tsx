@@ -40,11 +40,11 @@ export const MarketPage = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [result, setResult] = useState<PriceResult | null>(null);
   const [recentSearches, setRecentSearches] = useState<PriceResult[]>([]);
-  const [showCamera, setShowCamera] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Separate refs for camera and gallery
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const handleSearch = async () => {
     if (!searchQuery.trim() || !selectedPlatform) return;
@@ -82,53 +82,8 @@ export const MarketPage = () => {
     }
   };
 
-  // Start camera
-  const startCamera = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-      setShowCamera(true);
-    } catch (error) {
-      console.error('Camera error:', error);
-      // Fallback to file input
-      fileInputRef.current?.click();
-    }
-  };
-
-  // Stop camera
-  const stopCamera = () => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-    setShowCamera(false);
-  };
-
-  // Capture photo from camera
-  const capturePhoto = () => {
-    if (videoRef.current) {
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-        setCapturedImage(dataUrl);
-        stopCamera();
-        // In a real app, we'd send this to an OCR/barcode API
-        // For now, just show a message
-      }
-    }
-  };
-
-  // Handle file upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle file/photo selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
@@ -137,6 +92,18 @@ export const MarketPage = () => {
       };
       reader.readAsDataURL(file);
     }
+    // Reset input so same file can be selected again
+    e.target.value = '';
+  };
+
+  // Open camera
+  const openCamera = () => {
+    cameraInputRef.current?.click();
+  };
+
+  // Open gallery
+  const openGallery = () => {
+    galleryInputRef.current?.click();
   };
 
   return (
@@ -153,80 +120,45 @@ export const MarketPage = () => {
           </p>
         </header>
 
-        {/* Camera View */}
-        {showCamera && (
-          <div className="fixed inset-0 z-50 bg-black flex flex-col">
-            <div className="flex items-center justify-between p-4">
-              <span className="text-white font-medium">Scan Barcode or Take Photo</span>
-              <button 
-                type="button"
-                onClick={stopCamera}
-                className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"
-              >
-                <X className="w-5 h-5 text-white" />
-              </button>
-            </div>
-            <div className="flex-1 relative">
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                className="w-full h-full object-cover"
-              />
-              {/* Scan overlay */}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-64 h-40 border-2 border-white/50 rounded-lg">
-                  <div className="absolute top-0 left-0 w-8 h-8 border-t-4 border-l-4 border-primary rounded-tl-lg" />
-                  <div className="absolute top-0 right-0 w-8 h-8 border-t-4 border-r-4 border-primary rounded-tr-lg" />
-                  <div className="absolute bottom-0 left-0 w-8 h-8 border-b-4 border-l-4 border-primary rounded-bl-lg" />
-                  <div className="absolute bottom-0 right-0 w-8 h-8 border-b-4 border-r-4 border-primary rounded-br-lg" />
-                </div>
-              </div>
-            </div>
-            <div className="p-6 flex justify-center">
-              <button
-                type="button"
-                onClick={capturePhoto}
-                className="w-16 h-16 rounded-full bg-white flex items-center justify-center"
-              >
-                <div className="w-14 h-14 rounded-full border-4 border-black" />
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Hidden file input */}
+        {/* Hidden file inputs - one for camera, one for gallery */}
         <input
-          ref={fileInputRef}
+          ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
-          onChange={handleFileUpload}
+          onChange={handleFileSelect}
           className="hidden"
+          aria-hidden="true"
+        />
+        <input
+          ref={galleryInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileSelect}
+          className="hidden"
+          aria-hidden="true"
         />
 
         {/* Search Form */}
         <div className="card-premium p-4 space-y-4 mb-6">
           {/* Scan/Photo Buttons */}
           <div className="flex gap-2">
-            <Button
+            <button
               type="button"
-              variant="outline"
-              onClick={startCamera}
-              className="flex-1 border-dashed"
+              onClick={openCamera}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-border bg-secondary/50 text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all active:scale-95"
             >
-              <ScanBarcode className="w-4 h-4 mr-2" />
-              Scan Barcode
-            </Button>
-            <Button
+              <ScanBarcode className="w-5 h-5" />
+              <span className="font-medium">Scan</span>
+            </button>
+            <button
               type="button"
-              variant="outline"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex-1 border-dashed"
+              onClick={openGallery}
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 border-dashed border-border bg-secondary/50 text-muted-foreground hover:text-foreground hover:border-primary/50 transition-all active:scale-95"
             >
-              <Camera className="w-4 h-4 mr-2" />
-              Take Photo
-            </Button>
+              <Camera className="w-5 h-5" />
+              <span className="font-medium">Photo</span>
+            </button>
           </div>
 
           {/* Captured Image Preview */}
@@ -235,18 +167,20 @@ export const MarketPage = () => {
               <img 
                 src={capturedImage} 
                 alt="Captured" 
-                className="w-full h-32 object-cover rounded-lg"
+                className="w-full h-40 object-cover rounded-lg"
               />
               <button
                 type="button"
                 onClick={() => setCapturedImage(null)}
-                className="absolute top-2 right-2 w-6 h-6 rounded-full bg-black/50 flex items-center justify-center"
+                className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/70 flex items-center justify-center hover:bg-black transition-colors"
               >
                 <X className="w-4 h-4 text-white" />
               </button>
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                📷 Photo captured! Enter the game name below to search.
-              </p>
+              <div className="absolute bottom-2 left-2 right-2 bg-black/70 rounded-lg px-3 py-2">
+                <p className="text-xs text-white text-center">
+                  📷 Photo captured! Enter the game name below to search.
+                </p>
+              </div>
             </div>
           )}
 
@@ -258,7 +192,7 @@ export const MarketPage = () => {
 
           {/* Game Name */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
@@ -277,10 +211,10 @@ export const MarketPage = () => {
                   key={platform}
                   type="button"
                   onClick={() => setSelectedPlatform(platform)}
-                  className={`px-3 py-2 text-xs rounded-lg transition-all touch-manipulation ${
+                  className={`px-3 py-2 text-xs rounded-lg transition-all active:scale-95 ${
                     selectedPlatform === platform
                       ? 'bg-primary text-primary-foreground font-medium'
-                      : 'bg-secondary text-muted-foreground hover:text-foreground active:bg-primary/20'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   {platform}
@@ -298,10 +232,10 @@ export const MarketPage = () => {
                   key={condition.value}
                   type="button"
                   onClick={() => setSelectedCondition(condition.value)}
-                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg transition-all touch-manipulation ${
+                  className={`flex items-center justify-center gap-2 px-3 py-3 rounded-lg transition-all active:scale-95 ${
                     selectedCondition === condition.value
                       ? 'bg-primary text-primary-foreground font-medium'
-                      : 'bg-secondary text-muted-foreground hover:text-foreground active:bg-primary/20'
+                      : 'bg-secondary text-muted-foreground hover:text-foreground'
                   }`}
                 >
                   <span>{condition.icon}</span>
@@ -316,7 +250,7 @@ export const MarketPage = () => {
             type="button"
             onClick={handleSearch}
             disabled={!searchQuery.trim() || !selectedPlatform || isSearching}
-            className="w-full bg-gradient-to-r from-violet-500 to-purple-600 hover:opacity-90"
+            className="w-full bg-gradient-to-r from-violet-500 to-purple-600 hover:opacity-90 h-12"
           >
             {isSearching ? (
               <>
