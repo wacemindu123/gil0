@@ -236,6 +236,11 @@ const Index = () => {
             setIsDetailModalOpen(false);
             setSelectedAsset(null);
           }}
+          onDelete={async (assetId) => {
+            await deleteGame(assetId);
+            setIsDetailModalOpen(false);
+            setSelectedAsset(null);
+          }}
         />
       </div>
     );

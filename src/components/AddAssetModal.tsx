@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Camera, 
   ChevronLeft, 
@@ -14,7 +14,9 @@ import {
   Gamepad2,
   ImageIcon,
   Upload,
-  RefreshCw
+  RefreshCw,
+  ScanBarcode,
+  X
 } from 'lucide-react';
 import { AssetCategory, MarketComparable } from '@/types/asset';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -24,6 +26,8 @@ import { Button } from '@/components/ui/button';
 import { PhotoCapture } from '@/components/PhotoCapture';
 import { lookupPrice, isAnyApiConfigured } from '@/services/priceLookup';
 import { getGameCoverImage } from '@/services/gameImageService';
+import { lookupByUPC } from '@/services/priceChartingApi';
+import Quagga from '@ericblade/quagga2';
 
 interface AddAssetModalProps {
   isOpen: boolean;
@@ -64,6 +68,13 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
   // Ref for image upload input
   const imageUploadRef = useRef<HTMLInputElement>(null);
   
+  // Barcode scanning state
+  const [showScanner, setShowScanner] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [isLookingUpBarcode, setIsLookingUpBarcode] = useState(false);
+  const scannerRef = useRef<HTMLDivElement>(null);
+  
   // Video game specific fields
   const [platform, setPlatform] = useState('');
   const [region, setRegion] = useState<'NTSC' | 'PAL' | 'NTSC-J' | 'other'>('NTSC');
@@ -88,6 +99,103 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
   const [methodology, setMethodology] = useState<string>('');
   const [priceSource, setPriceSource] = useState<'pricecharting' | 'ebay' | 'mock' | 'combined' | null>(null);
 
+  // Barcode scanner functions
+  const startScanner = useCallback(() => {
+    setScanError(null);
+    setShowScanner(true);
+    
+    setTimeout(() => {
+      if (!scannerRef.current) return;
+      
+      Quagga.init({
+        inputStream: {
+          name: "Live",
+          type: "LiveStream",
+          target: scannerRef.current,
+          constraints: {
+            facingMode: "environment",
+            width: { min: 640, ideal: 1280, max: 1920 },
+            height: { min: 480, ideal: 720, max: 1080 },
+          },
+        },
+        decoder: {
+          readers: ["upc_reader", "upc_e_reader", "ean_reader", "ean_8_reader"],
+        },
+        locate: true,
+      }, (err) => {
+        if (err) {
+          console.error('Scanner init error:', err);
+          setScanError('Could not access camera');
+          setShowScanner(false);
+          return;
+        }
+        Quagga.start();
+        setIsScanning(true);
+      });
+    }, 100);
+  }, []);
+
+  const stopScanner = useCallback(() => {
+    if (isScanning) {
+      Quagga.stop();
+      setIsScanning(false);
+    }
+    setShowScanner(false);
+  }, [isScanning]);
+
+  // Handle barcode detection
+  useEffect(() => {
+    const handleDetected = async (data: { codeResult: { code: string } }) => {
+      const code = data.codeResult.code;
+      if (code && code.length >= 8) {
+        stopScanner();
+        setIsLookingUpBarcode(true);
+        
+        try {
+          const gameInfo = await lookupByUPC(code);
+          
+          if (gameInfo) {
+            setName(gameInfo.name);
+            setPlatform(gameInfo.platform);
+            
+            // Set estimated value from scanned data
+            const price = gameInfo.prices.cib || gameInfo.prices.loose || gameInfo.prices.sealed || 0;
+            if (price > 0) {
+              setEstimatedValue(price);
+            }
+            
+            // Skip to pricing step since we have the game info
+            setStep('pricing');
+          } else {
+            setScanError(`No game found for barcode: ${code}. Try manual entry.`);
+          }
+        } catch (error) {
+          console.error('UPC lookup error:', error);
+          setScanError('Failed to look up barcode');
+        } finally {
+          setIsLookingUpBarcode(false);
+        }
+      }
+    };
+
+    if (isScanning) {
+      Quagga.onDetected(handleDetected);
+    }
+
+    return () => {
+      Quagga.offDetected(handleDetected);
+    };
+  }, [isScanning, stopScanner]);
+
+  // Cleanup scanner on unmount or close
+  useEffect(() => {
+    if (!isOpen && isScanning) {
+      Quagga.stop();
+      setIsScanning(false);
+      setShowScanner(false);
+    }
+  }, [isOpen, isScanning]);
+
   // Reset form when modal closes
   useEffect(() => {
     if (!isOpen) {
@@ -98,6 +206,9 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
         setSource('');
         setPhotos([]);
         setPlatform('');
+        setShowScanner(false);
+        setIsScanning(false);
+        setScanError(null);
         setRegion('NTSC');
         setConditionType('cib');
         setGradingCompany('raw');
@@ -272,6 +383,54 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
 
         {renderStepIndicator()}
 
+        {/* Barcode Scanner Modal */}
+        {showScanner && (
+          <div className="fixed inset-0 z-[100] bg-black flex flex-col">
+            <div className="flex items-center justify-between p-4 bg-black/80">
+              <div>
+                <span className="text-white font-medium">Scan Barcode</span>
+                <p className="text-white/60 text-xs">Point at UPC barcode on game case</p>
+              </div>
+              <button 
+                type="button"
+                onClick={stopScanner}
+                className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center"
+              >
+                <X className="w-5 h-5 text-white" />
+              </button>
+            </div>
+            
+            <div className="flex-1 relative">
+              <div ref={scannerRef} className="w-full h-full" />
+              
+              {/* Scan overlay */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="w-72 h-32 border-2 border-primary rounded-lg relative">
+                  <div className="absolute top-0 left-0 w-6 h-6 border-t-4 border-l-4 border-primary rounded-tl-lg" />
+                  <div className="absolute top-0 right-0 w-6 h-6 border-t-4 border-r-4 border-primary rounded-tr-lg" />
+                  <div className="absolute bottom-0 left-0 w-6 h-6 border-b-4 border-l-4 border-primary rounded-bl-lg" />
+                  <div className="absolute bottom-0 right-0 w-6 h-6 border-b-4 border-r-4 border-primary rounded-br-lg" />
+                  <div className="absolute left-2 right-2 h-0.5 bg-primary animate-pulse" 
+                       style={{ top: '50%', boxShadow: '0 0 10px hsl(var(--primary))' }} />
+                </div>
+              </div>
+              
+              {isLookingUpBarcode && (
+                <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+                  <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
+                    <p className="text-white">Looking up game...</p>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="p-4 bg-black/80 text-center">
+              <p className="text-white/60 text-sm">Align the barcode within the frame</p>
+            </div>
+          </div>
+        )}
+
         {/* Step 1: Method Selection */}
         {step === 'method' && (
           <div className="space-y-4">
@@ -279,21 +438,52 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
               How would you like to add your game?
             </p>
             
+            {scanError && (
+              <div className="p-3 rounded-lg bg-destructive/20 border border-destructive/30 flex items-start gap-2">
+                <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />
+                <div>
+                  <p className="text-sm text-destructive">{scanError}</p>
+                  <button 
+                    onClick={() => setScanError(null)}
+                    className="text-xs text-destructive/70 hover:text-destructive mt-1"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 gap-3">
+              {/* Barcode Scan Option */}
               <button
-                onClick={() => setStep('photo')}
-                className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 hover:border-primary/40 transition-all group"
+                onClick={startScanner}
+                className="flex items-center gap-4 p-4 rounded-xl bg-gradient-to-r from-primary/20 to-primary/10 border border-primary/30 hover:border-primary/50 transition-all group"
               >
-                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Camera className="w-6 h-6 text-primary" />
+                <div className="w-12 h-12 rounded-full bg-primary/30 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <ScanBarcode className="w-6 h-6 text-primary" />
                 </div>
                 <div className="text-left">
-                  <p className="font-semibold text-foreground">Scan / Take Photo</p>
+                  <p className="font-semibold text-foreground">Scan Barcode</p>
+                  <p className="text-xs text-muted-foreground">Instantly look up game by UPC</p>
+                </div>
+                <Sparkles className="w-5 h-5 text-primary ml-auto" />
+              </button>
+              
+              {/* Photo Option */}
+              <button
+                onClick={() => setStep('photo')}
+                className="flex items-center gap-4 p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 hover:border-border transition-all group"
+              >
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Camera className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <div className="text-left">
+                  <p className="font-semibold text-foreground">Take Photo</p>
                   <p className="text-xs text-muted-foreground">Capture your game with camera</p>
                 </div>
-                <Sparkles className="w-5 h-5 text-primary ml-auto opacity-60" />
               </button>
 
+              {/* Manual Entry Option */}
               <button
                 onClick={() => setStep('details')}
                 className="flex items-center gap-4 p-4 rounded-xl bg-secondary hover:bg-secondary/80 border border-border/50 hover:border-border transition-all"
@@ -332,20 +522,20 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
               </div>
             )}
 
-            <div className="space-y-2">
+          <div className="space-y-2">
               <Label htmlFor="name" className="text-sm text-muted-foreground">
                 Game Title <span className="text-primary">*</span>
               </Label>
-              <Input
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Super Mario Bros."
-                className="bg-secondary border-border focus:border-primary"
-              />
-            </div>
+              className="bg-secondary border-border focus:border-primary"
+            />
+          </div>
 
-            <div className="space-y-2">
+          <div className="space-y-2">
               <Label className="text-sm text-muted-foreground">
                 Platform <span className="text-primary">*</span>
               </Label>
@@ -496,8 +686,8 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
                     <ImageIcon className="w-6 h-6 text-muted-foreground" />
                   </div>
                 )}
-              </div>
-              
+          </div>
+
               {/* Game info */}
               <div className="flex-1 min-w-0 flex flex-col justify-between">
                 <div>
@@ -506,8 +696,8 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
                     {platform} • {conditionType.toUpperCase()}
                     {gradingCompany !== 'raw' && ` • ${gradingCompany}`}
                   </p>
-                </div>
-                
+          </div>
+
                 {/* Image action buttons */}
                 <div className="flex items-center gap-2 mt-1">
                   <button
@@ -706,35 +896,35 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
                   {methodology}
                 </p>
               )}
-            </div>
+          </div>
 
             {/* Purchase Info */}
             <div className="space-y-3">
-              <div className="space-y-2">
+          <div className="space-y-2">
                 <Label htmlFor="price" className="text-sm text-muted-foreground">
                   Your Purchase Price ($) <span className="text-primary">*</span>
                 </Label>
-                <Input
-                  id="price"
-                  type="number"
-                  value={purchasePrice}
-                  onChange={(e) => setPurchasePrice(e.target.value)}
-                  placeholder="0.00"
-                  className="bg-secondary border-border focus:border-primary"
-                />
-              </div>
+            <Input
+              id="price"
+              type="number"
+              value={purchasePrice}
+              onChange={(e) => setPurchasePrice(e.target.value)}
+              placeholder="0.00"
+              className="bg-secondary border-border focus:border-primary"
+            />
+          </div>
 
-              <div className="space-y-2">
+          <div className="space-y-2">
                 <Label htmlFor="source" className="text-sm text-muted-foreground">
                   Purchase Source <span className="text-primary">*</span>
                 </Label>
-                <Input
-                  id="source"
-                  value={source}
-                  onChange={(e) => setSource(e.target.value)}
+            <Input
+              id="source"
+              value={source}
+              onChange={(e) => setSource(e.target.value)}
                   placeholder="e.g., eBay, Heritage Auctions, Local Game Store"
-                  className="bg-secondary border-border focus:border-primary"
-                />
+              className="bg-secondary border-border focus:border-primary"
+            />
               </div>
             </div>
 
@@ -832,7 +1022,7 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
                   </div>
                 )}
               </div>
-            </div>
+          </div>
 
             <div className="flex gap-3">
               <Button
@@ -843,13 +1033,13 @@ export const AddAssetModal = ({ isOpen, onClose, onAdd }: AddAssetModalProps) =>
                 <ChevronLeft className="w-4 h-4 mr-1" />
                 Back
               </Button>
-              <Button
+          <Button 
                 onClick={handleSubmit}
                 className="flex-1 btn-premium"
-              >
+          >
                 <Check className="w-4 h-4 mr-1" />
                 Add Game
-              </Button>
+          </Button>
             </div>
           </div>
         )}

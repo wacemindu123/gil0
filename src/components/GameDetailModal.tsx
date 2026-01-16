@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Asset } from '@/types/asset';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
 import { 
   X, 
   TrendingUp, 
@@ -14,7 +15,8 @@ import {
   DollarSign,
   Clock,
   RefreshCw,
-  Loader2
+  Loader2,
+  Trash2
 } from 'lucide-react';
 import { searchPriceCharting } from '@/services/priceChartingApi';
 import { isPriceChartingConfigured } from '@/config/api';
@@ -23,6 +25,7 @@ interface GameDetailModalProps {
   asset: Asset | null;
   isOpen: boolean;
   onClose: () => void;
+  onDelete?: (assetId: string) => void;
 }
 
 interface PriceHistoryPoint {
@@ -30,16 +33,25 @@ interface PriceHistoryPoint {
   price: number;
 }
 
-export const GameDetailModal = ({ asset, isOpen, onClose }: GameDetailModalProps) => {
+export const GameDetailModal = ({ asset, isOpen, onClose, onDelete }: GameDetailModalProps) => {
   const [priceHistory, setPriceHistory] = useState<PriceHistoryPoint[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [currentMarketPrice, setCurrentMarketPrice] = useState<number | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [priceBreakdown, setPriceBreakdown] = useState<{
     loose?: number;
     cib?: number;
     new?: number;
     graded?: number;
   } | null>(null);
+
+  const handleDelete = () => {
+    if (asset && onDelete) {
+      onDelete(asset.id);
+      setShowDeleteConfirm(false);
+      onClose();
+    }
+  };
 
   useEffect(() => {
     if (isOpen && asset) {
@@ -455,6 +467,43 @@ export const GameDetailModal = ({ asset, isOpen, onClose }: GameDetailModalProps
               </div>
             </div>
           </div>
+
+          {/* Delete Button */}
+          {onDelete && (
+            <div className="pt-4 border-t border-border">
+              {!showDeleteConfirm ? (
+                <Button
+                  variant="outline"
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="w-full text-destructive border-destructive/30 hover:bg-destructive/10"
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Remove from Collection
+                </Button>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-sm text-center text-muted-foreground">
+                    Are you sure you want to remove this game?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="flex-1"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      onClick={handleDelete}
+                      className="flex-1 bg-destructive hover:bg-destructive/90"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
