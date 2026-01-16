@@ -297,3 +297,62 @@ function findBestMatch(
   scored.sort((a, b) => b.score - a.score);
   return scored[0]?.score > 0 ? scored[0].product : products[0];
 }
+
+/**
+ * Look up a game by UPC/EAN barcode
+ */
+export async function lookupByUPC(upc: string): Promise<{
+  name: string;
+  platform: string;
+  prices: {
+    loose?: number;
+    cib?: number;
+    sealed?: number;
+  };
+} | null> {
+  if (!isPriceChartingConfigured()) {
+    console.log('PriceCharting API not configured');
+    return null;
+  }
+
+  try {
+    // Clean the UPC - remove any non-numeric characters
+    const cleanUPC = upc.replace(/\D/g, '');
+    
+    const searchParams = new URLSearchParams({
+      t: apiConfig.priceCharting.apiKey,
+      upc: cleanUPC,
+    });
+
+    const response = await fetch(
+      `${apiConfig.priceCharting.baseUrl}/product?${searchParams}`
+    );
+
+    if (!response.ok) {
+      console.error('PriceCharting UPC lookup error:', response.status);
+      return null;
+    }
+
+    const data: PriceChartingResponse = await response.json();
+
+    if (!data.product) {
+      console.log('No product found for UPC:', cleanUPC);
+      return null;
+    }
+
+    const product = data.product;
+    
+    return {
+      name: product['product-name'],
+      platform: product['console-name'] || 'Unknown',
+      prices: {
+        loose: product['loose-price'] ? product['loose-price'] / 100 : undefined,
+        cib: product['cib-price'] ? product['cib-price'] / 100 : undefined,
+        sealed: product['new-price'] ? product['new-price'] / 100 : undefined,
+      },
+    };
+  } catch (error) {
+    console.error('PriceCharting UPC lookup error:', error);
+    return null;
+  }
+}
